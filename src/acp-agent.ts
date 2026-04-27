@@ -1718,9 +1718,20 @@ export class ClaudeAcpAgent implements Agent {
       }
     }
 
-    const permissionMode = resolvePermissionMode(
-      settingsManager.getSettings().permissions?.defaultMode,
-    );
+    const configuredDefaultMode = settingsManager.getSettings().permissions?.defaultMode;
+    let permissionMode: PermissionMode;
+    try {
+      permissionMode = resolvePermissionMode(configuredDefaultMode);
+    } catch (error) {
+      // Bad value in settings should not crash session creation — fall back to
+      // the default mode and log so the user can see why their setting was
+      // ignored. Mirrors how the Claude Code SDK tolerates broken settings.
+      this.logger.error(
+        `Ignoring permissions.defaultMode from settings:`,
+        error instanceof Error ? error.message : error,
+      );
+      permissionMode = "default";
+    }
 
     // Extract options from _meta if provided
     const sessionMeta = params._meta as NewSessionMeta | undefined;
@@ -1858,7 +1869,12 @@ export class ClaudeAcpAgent implements Agent {
       );
     }
 
-    const models = await getAvailableModels(q, initializationResult.models, settingsManager);
+    const models = await getAvailableModels(
+      q,
+      initializationResult.models,
+      settingsManager,
+      this.logger,
+    );
 
     const availableModes = [
       {
@@ -2193,6 +2209,7 @@ async function getAvailableModels(
   query: Query,
   models: ModelInfo[],
   settingsManager: SettingsManager,
+  logger: Logger,
 ): Promise<SessionModelState> {
   const settings = settingsManager.getSettings();
 
@@ -2207,10 +2224,19 @@ async function getAvailableModels(
     if (match) {
       currentModel = match;
     }
-  } else if (settings.model) {
-    const match = resolveModelPreference(models, settings.model);
-    if (match) {
-      currentModel = match;
+  } else if (settings.model !== undefined) {
+    if (typeof settings.model === "string") {
+      const match = resolveModelPreference(models, settings.model);
+      if (match) {
+        currentModel = match;
+      }
+    } else {
+      // Bad value in settings should not crash session creation — log and
+      // fall back to the SDK's default model. Mirrors how broken settings
+      // are tolerated elsewhere.
+      logger.error(
+        `Ignoring model from settings: expected a string, got ${typeof settings.model}`,
+      );
     }
   }
 
