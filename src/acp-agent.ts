@@ -2212,9 +2212,7 @@ function resolveSettingsModel(
   }
   if (typeof settingsModel !== "string") {
     const typeLabel = settingsModel === null ? "null" : typeof settingsModel;
-    logger.error(
-      `Ignoring model from settings: expected a string, got ${typeLabel}.`,
-    );
+    logger.error(`Ignoring model from settings: expected a string, got ${typeLabel}.`);
     return null;
   }
   return resolveModelPreference(models, settingsModel);
