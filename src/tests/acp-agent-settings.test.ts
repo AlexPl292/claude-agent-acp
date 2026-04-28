@@ -185,22 +185,7 @@ describe("ClaudeAcpAgent settings", () => {
     const projectDir = path.join(tempDir, "project");
     await fs.promises.mkdir(projectDir, { recursive: true });
 
-    const setModelSpy = vi.fn();
-    querySpy.mockImplementation(({ options: _options }: any) => {
-      return {
-        initializationResult: async () => ({
-          models: [
-            {
-              value: "claude-sonnet-4-5",
-              displayName: "Claude Sonnet 4.5",
-              description: "Default",
-            },
-          ],
-        }),
-        setModel: setModelSpy,
-        supportedCommands: async () => [],
-      } as any;
-    });
+    const { setModelSpy } = mockQuery();
 
     const { ClaudeAcpAgent } = await import("../acp-agent.js");
     const agent: ClaudeAcpAgentType = new ClaudeAcpAgent(createMockClient());
