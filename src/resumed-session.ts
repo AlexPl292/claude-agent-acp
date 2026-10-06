@@ -168,10 +168,61 @@ async function scanLinesBackwards(filePath: string, visit: (line: Buffer) => boo
   }
 }
 
+/** The fields of an assistant record that give its ACP message id. */
+export type AgentTextRecord = {
+  type: "assistant";
+  uuid?: string | null;
+  message?: unknown;
+};
+
+/**
+ * The last assistant record of the main thread that has text, in the local
+ * transcript of a session.
+ *
+ * Only a record with a text block becomes an `agent_message_chunk`, so only
+ * such a record names a message that a client has. Thinking and tool use
+ * records are skipped. Undefined when the session has no local transcript or
+ * no agent text yet.
+ */
+export async function readLastAgentTextRecord(
+  sessionId: string,
+  logger?: ResumeLogger,
+): Promise<AgentTextRecord | undefined> {
+  try {
+    const filePath = await findTranscript(sessionId);
+    if (!filePath) return undefined;
+    let found: AgentTextRecord | undefined;
+    await scanLinesBackwards(filePath, (line) => {
+      if (line.indexOf('"assistant"') < 0) return false;
+      const record = parseMainThreadRecord(line);
+      if (record?.type !== "assistant" || !hasTextBlock(record.message?.content)) return false;
+      found = record as AgentTextRecord;
+      return true;
+    });
+    return found;
+  } catch (error) {
+    logger?.error(`Failed to read the last agent message of session ${sessionId}:`, error);
+    return undefined;
+  }
+}
+
+function hasTextBlock(content: unknown): boolean {
+  if (!Array.isArray(content)) return false;
+  return content.some(
+    (block) =>
+      block &&
+      typeof block === "object" &&
+      (block as { type?: unknown }).type === "text" &&
+      typeof (block as { text?: unknown }).text === "string" &&
+      (block as { text: string }).text.length > 0,
+  );
+}
+
 type TranscriptRecord = {
   type?: unknown;
   isSidechain?: unknown;
-  message?: { model?: unknown };
+  uuid?: unknown;
+  message?: { model?: unknown; content?: unknown };
   permissionMode?: unknown;
   origin?: { kind?: unknown };
   attachment?: { type?: unknown };

@@ -10,6 +10,12 @@ export const AIR_RAW_INPUT_RENDERING_CAPABILITY = "rawInputRendering";
  * file, and AIR reads the plan from it.
  */
 export const AIR_PLAN_FILE_CAPABILITY = "planFile";
+/**
+ * The `session/resume` response names the last agent text message of the main
+ * thread. AIR compares it with its own transcript and loads the history when
+ * another client continued the session.
+ */
+export const AIR_TRANSCRIPT_HEAD_CAPABILITY = "transcriptHead";
 
 /** The `_meta.jetbrains.air` keys that the ACP tool call contract defines. */
 export const AIR_COMMAND_TITLE_KEY = "commandTitle";

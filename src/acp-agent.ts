@@ -126,6 +126,7 @@ import {
   AIR_KIND_KEY,
   AIR_RECOMMENDED_CONFIG_VALUE_CAPABILITY,
   AIR_SKILL_PATH_KEY,
+  AIR_TRANSCRIPT_HEAD_CAPABILITY,
   clientSupportsAirCapability,
   withAirMeta,
 } from "./air-extension.js";
@@ -172,6 +173,7 @@ import {
 import { forkSession } from "./fork-session.js";
 import { subagentHistory } from "./subagent-history.js";
 import {
+  readLastAgentTextRecord,
   readResumedSession,
   readResumedTail,
   type ResumedSessionSnapshot,
@@ -2768,6 +2770,7 @@ export class ClaudeAcpAgent {
                 AIR_RECOMMENDED_CONFIG_VALUE_CAPABILITY,
                 AIR_DIFF_PATCH_CAPABILITY,
                 AIR_PLAN_FILE_CAPABILITY,
+                AIR_TRANSCRIPT_HEAD_CAPABILITY,
               ),
               AIR_GOAL_KEY,
               {
@@ -2868,13 +2871,32 @@ export class ClaudeAcpAgent {
   async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
     if (this.providerUpdate) await this.providerUpdate;
     const result = await this.getOrCreateSession(params);
+    const transcriptHead = await this.transcriptHead(params.sessionId);
 
     // Needs to happen after we return the session
     setTimeout(() => {
       this.sendAvailableCommandsUpdate(params.sessionId);
       startMcpAuthentication(this, params.sessionId, params.mcpServers ?? []);
     }, 0);
-    return result;
+    return transcriptHead === undefined
+      ? result
+      : { ...result, _meta: withAirMeta(result._meta, AIR_TRANSCRIPT_HEAD_CAPABILITY, transcriptHead) };
+  }
+
+  /**
+   * The `messageId` of the last agent text message of the main thread, for a
+   * client that declared {@link AIR_TRANSCRIPT_HEAD_CAPABILITY}.
+   *
+   * It is the id that `agent_message_chunk` carries live and in a replay. A
+   * client whose transcript ends at another message knows that another client
+   * continued the session.
+   */
+  private async transcriptHead(sessionId: string): Promise<string | undefined> {
+    if (!clientSupportsAirCapability(this.clientCapabilities, AIR_TRANSCRIPT_HEAD_CAPABILITY)) {
+      return undefined;
+    }
+    const record = await readLastAgentTextRecord(sessionId, this.logger);
+    return record ? messageIdForGrouping(record) : undefined;
   }
 
   async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
