@@ -134,8 +134,18 @@ export async function findTranscript(sessionId: string): Promise<string | undefi
 /** The model of the last real assistant record and the last permission mode
  * of the main thread in a JSONL transcript. */
 async function lastTailRecords(filePath: string, withModel: boolean): Promise<ResumedTail> {
-  const handle = await open(filePath, "r");
   const scan = new TailScan(withModel);
+  await scanLinesBackwards(filePath, (line) => scan.visit(line));
+  return scan.tail;
+}
+
+/**
+ * Visit the lines of a JSONL file from the last to the first, until `visit`
+ * returns true. The cost does not grow with the length of the file when
+ * `visit` stops early.
+ */
+async function scanLinesBackwards(filePath: string, visit: (line: Buffer) => boolean): Promise<void> {
+  const handle = await open(filePath, "r");
   try {
     let end = (await handle.stat()).size;
     // The bytes of the line whose start is not read yet, in file order.
@@ -145,15 +155,14 @@ async function lastTailRecords(filePath: string, withModel: boolean): Promise<Re
       let chunk = Buffer.alloc(end - start);
       await handle.read(chunk, 0, chunk.length, start);
       for (let at = chunk.lastIndexOf(0x0a); at >= 0; at = chunk.lastIndexOf(0x0a)) {
-        if (scan.visit(Buffer.concat([chunk.subarray(at + 1), ...pending]))) return scan.tail;
+        if (visit(Buffer.concat([chunk.subarray(at + 1), ...pending]))) return;
         pending = [];
         chunk = chunk.subarray(0, at);
       }
       pending.unshift(chunk);
       end = start;
     }
-    scan.visit(Buffer.concat(pending));
-    return scan.tail;
+    visit(Buffer.concat(pending));
   } finally {
     await handle.close();
   }
